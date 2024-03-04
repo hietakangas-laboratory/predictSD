@@ -34,8 +34,7 @@ Model = Union[StarDist3D, StarDist2D]
 
 # The lines below search for ImageJ exe-file (newest version) on University computers. The paths/names can be changed.
 try:
-    ij_path = '/Applications/Fiji.app'
-    #ij_path = [*pl.Path(r"C:\hyapp").glob("fiji-win64*")][-1].joinpath(r"Fiji.app", "ImageJ-win64.exe")
+    ij_path = [*pl.Path(r"C:\hyapp").glob("fiji-win64*")][-1].joinpath(r"Fiji.app", "ImageJ-win64.exe")
 except IndexError:
     ij_path = None
 
@@ -43,9 +42,9 @@ except IndexError:
 # ------------------
 PREDICTSD_VARS = {
     # On Windows, give paths as: r'c:\PATH\TO\DIR'
-    'image_path': '/Users/sarahbluhm/Documents/GitHub/predictSD/test_images',
-    'label_path': '/Users/sarahbluhm/Documents/GitHub/predictSD/test_masks',
-    'output_path': '/Users/sarahbluhm/Documents/GitHub/predictSD/test_results',
+    'image_path': '/home/exp/images',
+    'label_path': '/home/exp/masks',
+    'output_path': '/home/exp/results',
 
     # Whether to save label data in LAM-compatible format and folder hierarchy
     # This expects that the images are named in a compatible manner, i.e. "samplegroup_samplename.tif"
@@ -57,7 +56,7 @@ PREDICTSD_VARS = {
 
     # If labels already exist set to True. If False, the labels will be predicted based on microscopy images.
     # Otherwise only result tables will be constructed.
-    'label_existence': True,
+    'label_existence': False,
 
     # ZYX-axes voxel dimensions in microns. Size is by default read from image metadata.
     # KEEP AS None UNLESS SIZE METADATA IS WRONG. Dimensions are given as tuple, i.e. force_voxel_size=(Zdim, Ydim, Xdim)
@@ -73,13 +72,13 @@ PREDICTSD_CONFIG = {
     # GIVE MODEL TO USE:
     # Give model names in tuple, e.g. "sd_models": ("DAPI10x", "GFP10x")
     # Pre-trained 2D StarDist models can be used with '2D_versatile_fluo' (DAPI) and '2D_versatile_he' (H&E)
-    "sd_models": ("DAPI10x"),
+    "sd_models": ("GFP10x", "DAPI10x"),
 
     # Channel position of the channel to predict. Set to None if images have only one channel. Indexing from zero.
     # If multiple channels, the numbers must be given in same order as sd_models, e.g. ("DAPI10x", "GFP10x") with (1, 0)
     # NOTE that the channel positions remain the same even if split to separate images with ImageJ!
     #  -> Array indexing however is changed for Python; either use input images with a single channel or all of them
-    "prediction_chs": (2),      # (1, 0)
+    "prediction_chs": (0, 1),      # (1, 0)
 
     # List of filters to apply to predicted labels. Each tuple must contain 1) index of data or name/model, 2) name of
     # column where filter is applied, 3) filtering value, and 4) 'min' or 'max' to indicate if filtering value is
@@ -122,7 +121,7 @@ PREDICTSD_CONFIG = {
     "memory_limit": (6000, 0.8),
 
     # Set True if predicting from large images in order to split the image into blocks.
-    "predict_big": False,
+    "predict_big": True,
 
     # Splitting of image into segments along z, y, and x axes. Long_div and short_div split the longer and shorter axis
     # of X and Y axes, respectively. The given number indicates how many splits are performed on the given axis.
@@ -564,13 +563,13 @@ class CollectLabelData:
         if self.image_data.is_2d:
             return grouped_voxels.size() * np.nan
         return grouped_voxels.size() * np.prod(self.image_data.voxel_dims)
-    
+
     def _expand_labels(self, path: Pathlike, Area: np.array, expand_distance: float) -> Pathlike:
         label_image = self.image_data.labels.img.astype(int)
 
         if self.image_data.is_2d:
             expanded_labels = self._watershed_expand(np.squeeze(label_image), Area, expand_distance)
-                
+
         else:
             expanded_labels_slice = [self._watershed_expand(label_image[i], Area, expand_distance) for i in range(label_image.shape[0])]
             expanded_labels = np.stack(expanded_labels_slice, axis=0)
@@ -582,7 +581,7 @@ class CollectLabelData:
         self.image_data.image.compatible_save(expanded_labels, str(save_expanded_label))
 
         return save_expanded_label
-    
+
     def _watershed_expand(self, label_layer: np.array, Area: np.array, expand_distance: float):
         # Create inverted boolean array from labels
         inverted_label_layer = np.logical_not(label_layer.astype(bool)).astype(int)
@@ -607,12 +606,12 @@ class CollectLabelData:
         mask = landscape < 1
 
         return watershed(landscape, markers = label_layer, mask = mask)
-    
-    def _signal_detection(self, expanded_voxel_data: pd.DataFrame, detection_method: list[Tuple[int, str, float]]) -> pd.Series:   
+
+    def _signal_detection(self, expanded_voxel_data: pd.DataFrame, detection_method: list[Tuple[int, str, float]]) -> pd.Series:
         # Initialize df to store cytosolic signal detection results
         detection_results = pd.DataFrame(index=expanded_voxel_data.index)
         detection_results['ID'] = expanded_voxel_data['ID']
-        
+
         # Loop through detection_method
         for channel_info in detection_method:
             channel, method, threshold = channel_info
@@ -732,10 +731,6 @@ class CollectLabelData:
         # Calculate other variables of interest
         output = output.assign(Volume = Volume, Area = Area)
 
-        # Find distance to each voxel from its' label's centroid (for intensity slope)
-        coords = voxel_sorted.loc[:, ['ID', *colmp.keys()]].groupby("ID")
-        # pxl_distance = np.sqrt(coords.transform(lambda x: (x - x.mean(skipna=True))**2).sum(axis=1))
-
         # Get intensities and calculate related variables for all image channels
         intensities = voxel_sorted.loc[:, voxel_sorted.columns.difference(['X', 'Y', 'Z'])].groupby("ID")
         output = output.join([  # Intensity min, max, median, sdev, slope
@@ -743,10 +738,14 @@ class CollectLabelData:
             intensities.agg(np.nanmax).rename(lambda x: x.replace("Mean", "Max"), axis=1),
             intensities.agg(np.nanmedian).rename(lambda x: x.replace("Mean", "Median"), axis=1),
             intensities.agg(np.nanstd).rename(lambda x: x.replace("Mean", "StdDev"), axis=1)])
+
         if kwargs.get("slopes") is not None and kwargs.get("slopes") is True:
+            # Find distance to each voxel from its' label's centroid (for intensity slope)
+            coords = voxel_sorted.loc[:, ['ID', *colmp.keys()]].groupby("ID")
+            pxl_distance = np.sqrt(coords.transform(lambda x: (x - x.mean(skipna=True)) ** 2).sum(axis=1))
             output = output.join(intensities.agg(lambda yax, xax=pxl_distance: __intensity_slope(yax, xax)
                                                  ).rename(lambda x: x.replace("Mean", "Slope"), axis=1))
-        
+
         # If cytosolic signal detection desired:
         if kwargs['cytosolic_signal']:
             # Save expanded labels to same directory as original labels

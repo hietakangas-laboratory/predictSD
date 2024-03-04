@@ -648,9 +648,6 @@ class CollectLabelData:
             Volume      = self._get_volumes(voxel_data.loc[:, ['ID'] + list(colmp.keys())]),
             Area        = self._get_area_maximums(voxel_data)
         )
-        # Find distance to each voxel from its' label's centroid (for intensity slope)
-        coords = voxel_sorted.loc[:, ['ID', *colmp.keys()]].groupby("ID")
-        pxl_distance = np.sqrt(coords.transform(lambda x: (x - x.mean(skipna=True))**2).sum(axis=1))
 
         # Get intensities and calculate related variables for all image channels
         intensities = voxel_sorted.loc[:, voxel_sorted.columns.difference(['X', 'Y', 'Z'])].groupby("ID")
@@ -659,7 +656,11 @@ class CollectLabelData:
             intensities.agg(np.nanmax).rename(lambda x: x.replace("Mean", "Max"), axis=1),
             intensities.agg(np.nanmedian).rename(lambda x: x.replace("Mean", "Median"), axis=1),
             intensities.agg(np.nanstd).rename(lambda x: x.replace("Mean", "StdDev"), axis=1)])
+
         if kwargs.get("slopes") is not None and kwargs.get("slopes") is True:
+            # Find distance to each voxel from its' label's centroid (for intensity slope)
+            coords = voxel_sorted.loc[:, ['ID', *colmp.keys()]].groupby("ID")
+            pxl_distance = np.sqrt(coords.transform(lambda x: (x - x.mean(skipna=True)) ** 2).sum(axis=1))
             output = output.join(intensities.agg(lambda yax, xax=pxl_distance: __intensity_slope(yax, xax)
                                                  ).rename(lambda x: x.replace("Mean", "Slope"), axis=1))
         return output

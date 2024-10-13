@@ -97,11 +97,14 @@ PREDICTSD_CONFIG = {
 
     # Define the procedure for searching for cytosolic signals
     # A. Provide the channels to check for cytosolic signals. E.g. To check the DAPI signal in channel 2, write 2.
-    # B. Give the detection method. Only a single choice is available for now, which is "cutoff"
+    # B. Give the detection method. Two available for now, either "cutoff" or "means"
+        # The "cutoff" method outputs True/False (1/0) depending whether pixel intensities exceed detection value.
+        # The "means" method outputs mean intensity within the expanded outer ring.
     # C. Write the critical detection value.
         # For "cutoff" method: intensities >= critical value are counted as positive cytosolic signals.
+        # For "mean": critical value not used, can be set to None
     # Give A, B, & C as a [list] of (tuples). E.g. for channels 2 and 0, you could write [(2, "cutoff", 50), (0, "cutoff", 100)]
-    "detect": [(1, "cutoff", 55)],
+    "detect": [(1, "cutoff", 55), (2, "means", None)],
 
     # PREDICTION VARIABLES ("None" for default values of training):
     # --------------------
@@ -574,11 +577,15 @@ class CollectLabelData:
             expanded_labels_slice = [self._watershed_expand(label_image[i], Area, expand_distance) for i in range(label_image.shape[0])]
             expanded_labels = np.stack(expanded_labels_slice, axis=0)
 
+        # Subtract original labels from the expanded to get only the cytosolic pixels
+        outer_labels = expanded_labels - label_image
+
         # Save expanded labels
         expanded_image_name = f'{self.image_data.name}_{self.image_data.labels.label_name}_expanded'
         pl.Path(path, 'expanded').mkdir(parents=True, exist_ok=True)
         save_expanded_label = pl.Path(path, 'expanded', f'{expanded_image_name}.labels.tif')
-        self.image_data.image.compatible_save(expanded_labels, str(save_expanded_label))
+        self.image_data.image.compatible_save(outer_labels,
+                                              str(save_expanded_label))
 
         return save_expanded_label
 
@@ -619,9 +626,14 @@ class CollectLabelData:
 
             # Implement specified detection method
             if method == "cutoff":
-                detection_column = f'Channel {channel} Cytosolic Signal'
+                detection_column = f'Cytosolic Signal_Ch={channel}'
                 detection_results[detection_column] = 0
                 detection_results.loc[expanded_voxel_data[voxel_data_column] >= threshold, detection_column] = 1
+            elif method == "means":
+                detection_column = f'Cytosolic Intensity_Ch={channel}'
+                means = expanded_voxel_data.groupby("ID").agg({voxel_data_column: np.nanmean}).rename(
+                    columns={voxel_data_column: detection_column})
+                detection_results = pd.merge(detection_results, means.reset_index(), on='ID')
             else:
                 print("No (valid) detection method specified. Cytosolic signals will not be processed.")
         aggregated_results = detection_results.groupby('ID').max()

@@ -87,6 +87,14 @@ PREDICTSD_CONFIG = {
     #  -> filters all labels with Z-slice max area less than 15 and DAPI10x labels with volume > 750
     "filters": [('all', 'Area', 5.0, 'min')],  # ('DAPI10x', 'Intensity Mean_Ch=1', 150, 'min')],
 
+    # CYTOSOLIC SIGNALS:
+    # ------------------
+    # Settings controlling label expansion and evaluation of intensities in the expanded pixels. Labels are expanded
+    # depending on their radius, and only the expanded pixels are considered cytosolic. Output TIFFs are written into
+    # subfolder "expanded" at the path defined by 'label_path'. Requested signal data are included as additional columns
+    # in the result files.
+
+    # NOTE! Expansion is intended to be run on nuclear labels, but is run on any and all labels.
     # Evaluate cytosolic signals?
     "cytosolic_signal": True,
 
@@ -102,9 +110,10 @@ PREDICTSD_CONFIG = {
         # The "means" method outputs mean intensity within the expanded outer ring.
     # C. Write the critical detection value.
         # For "cutoff" method: intensities >= critical value are counted as positive cytosolic signals.
-        # For "mean": critical value not used, can be set to None
-    # Give A, B, & C as a [list] of (tuples). E.g. for channels 2 and 0, you could write [(2, "cutoff", 50), (0, "cutoff", 100)]
+        # For "means": critical value is not used and input has no effect.
+    # Give A, B, & C as a [list] of (tuples). E.g. for channels 2 and 0, you could write [(2, "cutoff", 50), (0, "means", None)]
     "detect": [(1, "cutoff", 55), (2, "means", None)],
+    # ----------------------------------------------------------------
 
     # PREDICTION VARIABLES ("None" for default values of training):
     # --------------------

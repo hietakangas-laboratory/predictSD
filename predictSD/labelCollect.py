@@ -623,11 +623,11 @@ class CollectLabelData:
 
         return watershed(landscape, markers = label_layer, mask = mask)
 
-    def _signal_detection(self, expanded_voxel_data: pd.DataFrame, detection_method: list[Tuple[int, str, float]]) -> pd.Series:
+    def _signal_detection(self, expanded_voxel_data: pd.DataFrame, detection_method: List[Tuple[int, str, float]]
+                          ) -> pd.DataFrame:
         # Initialize df to store cytosolic signal detection results
-        detection_results = pd.DataFrame(index=expanded_voxel_data.index)
-        detection_results['ID'] = expanded_voxel_data['ID']
-
+        detection_results = pd.DataFrame(index=expanded_voxel_data['ID'].unique())
+        detection_results["ID"] = detection_results.index
         # Loop through detection_method
         for channel_info in detection_method:
             channel, method, threshold = channel_info
@@ -636,8 +636,10 @@ class CollectLabelData:
             # Implement specified detection method
             if method == "cutoff":
                 detection_column = f'Cytosolic Signal_Ch={channel}'
-                detection_results[detection_column] = 0
-                detection_results.loc[expanded_voxel_data[voxel_data_column] >= threshold, detection_column] = 1
+                medians = expanded_voxel_data.groupby("ID").agg({voxel_data_column: np.nanmedian}).rename(
+                    columns={voxel_data_column: detection_column})
+                medians["cutoff"] = (medians >= threshold) * 1
+                detection_results = pd.merge(detection_results, medians.cutoff.reset_index(), on='ID')
             elif method == "means":
                 detection_column = f'Cytosolic Intensity_Ch={channel}'
                 means = expanded_voxel_data.groupby("ID").agg({voxel_data_column: np.nanmean}).rename(
@@ -645,9 +647,7 @@ class CollectLabelData:
                 detection_results = pd.merge(detection_results, means.reset_index(), on='ID')
             else:
                 print("No (valid) detection method specified. Cytosolic signals will not be processed.")
-        aggregated_results = detection_results.groupby('ID').max()
-        # Return a pandas df with cytosolic signals
-        return aggregated_results
+        return detection_results
 
     def apply_filters(self, filter_list: list, print_no: bool = True, ret: bool = False) -> dict:
         """Filter an output DataFrame based on each label's value in given column.
@@ -773,7 +773,8 @@ class CollectLabelData:
             path_to_expanded_label = self._expand_labels(os.path.dirname(label_file), Area, float(kwargs['radius_expansion']))
             # Retrieve coordinates and intensities of voxels inside expanded labels
             expanded_voxel_data = self.image_data.labelled_voxels(item=path_to_expanded_label)
-            # Analyze cytosolic signal. Parameters are expanded_voxel_data and a list of tuples containing (channel to analyze, detection method, detection method threshold).
+            # Analyze cytosolic signal. Parameters are expanded_voxel_data and a list of tuples containing (channel to
+            # analyze, detection method, detection method threshold).
             signal = self._signal_detection(expanded_voxel_data, kwargs['detect'])
             # Add detection results (0 for negative, 1 for positive) to output
             output = pd.merge(output, signal, on = 'ID')

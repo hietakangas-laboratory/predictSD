@@ -85,7 +85,17 @@ PREDICTSD_CONFIG = {
     # the min or max allowed value. If the first item in tuple is 'all', filter is applied on all models.
     # E.g., "filters": [('all', 'Area', 15.0, 'min'), ('DAPI10x', 'Volume', 750.0, 'max')]
     #  -> filters all labels with Z-slice max area less than 15 and DAPI10x labels with volume > 750
-    "filters": [('all', 'Area', 5.0, 'min')],  # ('DAPI10x', 'Intensity Mean_Ch=1', 150, 'min')],
+    "filters": [('all', 'Area', 25.0, 'min')],  # ('DAPI10x', 'Intensity Mean_Ch=1', 150, 'min')],
+
+    # PREDICTION VARIABLES ("None" for default values of training):
+    # --------------------
+    # These variables are the primary way to influence label prediction and set values for ALL used models!
+    # If in need of finer tuning, edit config.json's within models
+    # [0-1 ; None] Non-maximum suppression, see: https://towardsdatascience.com/non-maximum-suppression-nms-93ce178e177c
+    "nms_threshold": 0.2,
+    # [0-1 ; None] Probability threshold, decrease if too few objects found, increase if  too many
+    "probability_threshold": 0.2,
+    # ----------------------------------------------------------------
 
     # CYTOSOLIC SIGNALS:
     # ------------------
@@ -101,28 +111,18 @@ PREDICTSD_CONFIG = {
     # Settings for expanding the nuclei labels
     # Define the size of the cytosolic area as the % increase in radius compared to the nucleus
     # E.g. If the radii of cells are ~30% larger than the radii of the nuclei, then write 0.3
-    "radius_expansion": 1.0,
+    "radius_expansion": 0.8,
 
     # Define the procedure for searching for cytosolic signals
     # A. Provide the channels to check for cytosolic signals. E.g. To check the DAPI signal in channel 2, write 2.
     # B. Give the detection method. Two available for now, either "cutoff" or "means"
-        # The "cutoff" method outputs True/False (1/0) depending whether pixel intensities exceed detection value.
-        # The "means" method outputs mean intensity within the expanded outer ring.
+    # The "cutoff" method outputs True/False (1/0) depending whether pixel intensities exceed detection value.
+    # The "means" method outputs mean intensity within the expanded outer ring.
     # C. Write the critical detection value.
-        # For "cutoff" method: intensities >= critical value are counted as positive cytosolic signals.
-        # For "means": critical value is not used and input has no effect.
+    # For "cutoff" method: intensities >= critical value are counted as positive cytosolic signals.
+    # For "means": critical value is not used and input has no effect.
     # Give A, B, & C as a [list] of (tuples). E.g. for channels 2 and 0, you could write [(2, "cutoff", 50), (0, "means", None)]
     "detect": [(1, "cutoff", 55), (2, "means", None)],
-    # ----------------------------------------------------------------
-
-    # PREDICTION VARIABLES ("None" for default values of training):
-    # --------------------
-    # These variables are the primary way to influence label prediction and set values for ALL used models!
-    # If in need of finer tuning, edit config.json's within models
-    # [0-1 ; None] Non-maximum suppression, see: https://towardsdatascience.com/non-maximum-suppression-nms-93ce178e177c
-    "nms_threshold": 0.2,
-    # [0-1 ; None] Probability threshold, decrease if too few objects found, increase if  too many
-    "probability_threshold": 0.2,
     # ----------------------------------------------------------------
 
     # MEMORY:
